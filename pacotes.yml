@@ -1,0 +1,13 @@
+---
+- name: Instal alguns pacotes
+  hosts: all
+  become: yes
+  gather_facts: no
+  vars_files:
+  - variaveis.yml
+  tasks:
+  - name: Instalando pacote
+    package:
+      name: '{{ pacote }}'
+      state: '{{estado}}'
+...

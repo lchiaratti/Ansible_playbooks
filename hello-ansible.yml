@@ -1,0 +1,8 @@
+---
+- hosts: docker
+  tasks:
+  - ping:
+- hosts: balancer, automation
+  tasks:
+  - shell: echo $HOSTNAME
+...

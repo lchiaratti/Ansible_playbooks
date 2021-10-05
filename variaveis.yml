@@ -1,0 +1,3 @@
+# Variaveis para pacotes.yml
+pacote: vim
+estado: present

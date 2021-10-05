@@ -1,0 +1,96 @@
+- hosts: docker
+  become: yes
+  vars:
+    user: lighttpd
+    group: lighttpd
+    cache: /tmp/lighttpd-compressed/
+  tasks:
+  - name: Verificando distribuição
+    set_fact:
+      user: www-data
+      group: www-data
+      cache: /var/cache/lighttpd 
+    when: ansible_distribution|lower == 'debian'
+  - name: Garantindo o epel-release em CentOS
+    package:
+      name: epel-release
+      state: present
+    when: ansible_distribution|lower == 'centos'
+  - name: Garantindo Lighttpd e Git
+    package:
+      name: ['lighttpd', 'git']
+      state: present
+  - name: Garantindo Configurações
+    template:
+      src: '{{ item }}' 
+      dest: /etc/lighttpd
+      owner: root
+      group: root
+    loop:
+    - /root/playbooks/files/mime-types.conf
+    - /root/playbooks/files/lighttpd.conf
+    register: config
+  - name: Garantindo configuraçoes do Proxy
+    blockinfile:
+      path: /etc/lighttpd/proxy.conf
+      create: yes
+      block: |
+        $SERVER["socket"] == ":8080" {
+            proxy.server = ( "" => ( ( "host" => "192.168.10.10", "port" => "80" )))
+         }
+      insertafter: '#Configuracoes do Ansible'
+    register: proxy  
+  - name: Garantindo diretorios
+    file:
+      path: '{{ item }}'
+      owner: '{{ user }}'
+      group: '{{ group }}'
+      state: directory
+    loop:
+    - /srv/www/html
+    - /var/cache/lighttpd
+    - /var/logs/lighttpd
+  - name: Reinciando Lighttpd para aplicar configurações
+    service:
+      name: lighttpd
+      state: restarted
+    when: config.changed or proxy.changed 
+  - name: Garantindo serviço do Lighttpd
+    service:
+      name: lighttpd
+      state: started
+      enabled: yes
+  - name: Removendo arquivos de /srv/www/html
+    shell: 'rm -rf /srv/www/html/* && rm -rf /srv/www/html.*'
+#  - name: Provisionando site de exemplo
+#    git:
+#      repo: http://172.27.11.10:3000/devops/site.git
+#      dest: /srv/www/html
+#      force: yes
+#  - get_url:
+#      url: http://172.27.11.10:3000/devops/site/raw/branch/ansible/index.html
+#      dest: /srv/www/html/index.html
+#      force: yes
+  - name: Copiando o site para as máquinas
+    unarchive:
+      src: /tmp/arquivo.tar
+      dest: /srv/www/html
+      extra_opts: '--strip-components=1'
+      owner: '{{ user }}'
+      group: '{{ group }}'
+      remote_src: yes
+  - name: Garantindo contexto de /srv/www/html
+    command: 'restorecon -R /srv/www/html/'
+    when: ansible_distribution|lower == 'centos'
+  - name: Testando conexão com o load balancer
+    uri:
+      url: http://172.27.11.20
+      status_code: [200, 201]
+    register: response
+    delegate_to: localhost
+    run_once: yes
+#  - name: Verificando status da conexão
+#    fail:
+#      msg: '[{{ response.status }}] - Load Balancer com problemas'
+#    run_once: yes
+#    when: response.status != 200    
